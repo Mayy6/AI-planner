@@ -1,18 +1,37 @@
 import { useState } from 'react';
+import { useAuth, AuthContext } from './context/AuthContext';
+import { isConfigured } from './lib/supabase';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
-import './index.css';
+import Calendar from './components/Calendar';
+import Login from './components/Login';
 
-export default function App() {
+const DEMO_USER = {
+  id: 'demo-user',
+  email: 'demo@aiplanner.app',
+  user_metadata: { name: 'Demo User', full_name: 'Demo User' },
+};
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
+
+function AppShell({ user }) {
   const [activePage, setActivePage] = useState('dashboard');
 
   const renderPage = () => {
     switch (activePage) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onNavigate={setActivePage} />;
+      case 'calendar':
+        return <Calendar />;
       default:
         return (
-          <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+          <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
             Coming soon...
           </div>
         );
@@ -22,9 +41,28 @@ export default function App() {
   return (
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar active={activePage} onNavigate={setActivePage} />
-      <main className="ml-56 flex-1 p-8">
-        {renderPage()}
-      </main>
+      <main className="ml-56 flex-1 p-8">{renderPage()}</main>
     </div>
   );
+}
+
+export default function App() {
+  const { user, loading } = useAuth();
+  const [demoMode, setDemoMode] = useState(false);
+
+  if (loading) return <LoadingScreen />;
+
+  // Real logged-in user
+  if (user) return <AppShell user={user} />;
+
+  // Demo bypass — inject a mock user into AuthContext so hooks work normally
+  if (demoMode) {
+    return (
+      <AuthContext.Provider value={{ user: DEMO_USER, loading: false, signOut: () => setDemoMode(false) }}>
+        <AppShell user={DEMO_USER} />
+      </AuthContext.Provider>
+    );
+  }
+
+  return <Login onDemo={() => setDemoMode(true)} />;
 }
