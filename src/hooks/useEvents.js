@@ -26,9 +26,47 @@ export function useEvents() {
     return newEvent;
   }, [events, persist]);
 
+  // Add many events atomically — avoids stale-closure overwrite when called in a loop
+  const addEvents = useCallback((list) => {
+    const added = list.map(ev => ({ ...ev, id: crypto.randomUUID() }));
+    persist([...events, ...added]);
+    return added;
+  }, [events, persist]);
+
+  // Atomically replace all events from a conversation with a new set.
+  // Tags every event with conversationId so they can be found and swapped on re-accept.
+  const replaceEventsByConversation = useCallback((conversationId, newList) => {
+    const kept = events.filter(e => e.conversationId !== conversationId);
+    const added = newList.map(ev => ({ ...ev, id: crypto.randomUUID(), conversationId }));
+    persist([...kept, ...added]);
+    return added;
+  }, [events, persist]);
+
+  // Returns conflicting existing events for a list of candidates.
+  // Pass excludeConvId to ignore events from a conversation that will be replaced anyway.
+  const checkConflicts = useCallback((candidates, excludeConvId = null) => {
+    const pool = excludeConvId
+      ? events.filter(e => e.conversationId !== excludeConvId)
+      : events;
+
+    return candidates.reduce((acc, candidate) => {
+      const hits = pool.filter(e =>
+        e.date === candidate.date &&
+        e.startTime < candidate.endTime &&
+        e.endTime > candidate.startTime
+      );
+      if (hits.length > 0) acc.push({ candidate, conflictsWith: hits });
+      return acc;
+    }, []);
+  }, [events]);
+
   const removeEvent = useCallback((id) => {
     persist(events.filter(e => e.id !== id));
   }, [events, persist]);
 
-  return { events, addEvent, removeEvent };
+  const toggleComplete = useCallback((id) => {
+    persist(events.map(e => e.id === id ? { ...e, completed: !e.completed } : e));
+  }, [events, persist]);
+
+  return { events, addEvent, addEvents, replaceEventsByConversation, checkConflicts, removeEvent, toggleComplete };
 }

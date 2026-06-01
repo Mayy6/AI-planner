@@ -2,6 +2,7 @@ import { Bell, Flame, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useEvents } from '../hooks/useEvents';
 import { useStreak } from '../hooks/useStreak';
+import { useSettings } from '../context/SettingsContext';
 
 const TYPE_DOT = {
   study: 'bg-blue-400',
@@ -68,6 +69,8 @@ export default function Dashboard({ onNavigate }) {
   const { user } = useAuth();
   const { events } = useEvents();
   const streak = useStreak(user?.id);
+  const { t } = useSettings();
+  const td = t.dashboard;
 
   const today = new Date();
   const todayStr = toDateStr(today);
@@ -91,14 +94,23 @@ export default function Dashboard({ onNavigate }) {
     ? Math.ceil((new Date(nextExam.date) - today) / (1000 * 60 * 60 * 24))
     : null;
 
-  // Study hours: sum up all study/review/exam events (hours)
-  const totalHours = events.reduce((sum, e) => {
-    const [sh, sm] = e.startTime.split(':').map(Number);
-    const [eh, em] = e.endTime.split(':').map(Number);
-    return sum + ((eh * 60 + em - sh * 60 - sm) / 60);
-  }, 0);
-  const completedHours = Math.round(totalHours);
-  const progress = totalHours > 0 ? Math.min(Math.round((completedHours / Math.max(completedHours + 10, 40)) * 100), 100) : 0;
+  // Progress: count completed vs total tasks in the next exam's plan (excludes breaks)
+  const planEvents = (() => {
+    if (!nextExam) return [];
+    if (nextExam.conversationId) {
+      // All events from the same AI-generated plan, excluding breaks
+      return events.filter(e =>
+        e.conversationId === nextExam.conversationId && e.type !== 'break'
+      );
+    }
+    // Fallback for manually added exams: non-break events between today and exam date
+    return events.filter(e =>
+      e.date >= todayStr && e.date <= nextExam.date && e.type !== 'break'
+    );
+  })();
+  const totalCount = planEvents.length;
+  const completedCount = planEvents.filter(e => e.completed).length;
+  const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   // First name from OAuth metadata
   const firstName =
@@ -128,7 +140,7 @@ export default function Dashboard({ onNavigate }) {
       <div className="grid grid-cols-2 gap-4 mb-4">
         {/* Upcoming Today */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-50">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Upcoming Today</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">{td.upcoming}</p>
           {upcomingEvent ? (
             <div className="flex items-start gap-3">
               <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${TYPE_DOT[upcomingEvent.type] || 'bg-blue-400'}`} />
@@ -141,28 +153,34 @@ export default function Dashboard({ onNavigate }) {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-gray-400">No sessions scheduled for today.</p>
+            <p className="text-sm text-gray-400">{td.noSessions}</p>
           )}
           <button
             onClick={() => onNavigate('calendar')}
             className="mt-3 text-xs text-violet-600 font-medium flex items-center gap-0.5 hover:gap-1.5 transition-all"
           >
-            View all <ChevronRight size={12} />
+            {td.viewAll} <ChevronRight size={12} />
           </button>
         </div>
 
         {/* Progress */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-50 flex flex-col items-center">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 self-start">Progress</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 self-start">{td.progress}</p>
           <CircularProgress percent={progress} />
-          <p className="text-xs font-semibold text-gray-700 mt-1">Overall Progress</p>
-          <p className="text-xs text-gray-400 mt-0.5">{completedHours} study hours scheduled</p>
+          <p className="text-xs font-semibold text-gray-700 mt-1 text-center truncate w-full text-center px-1">
+            {nextExam ? nextExam.title : td.nextExam}
+          </p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {totalCount > 0
+              ? `${completedCount} of ${totalCount} ${td.tasksDone}`
+              : nextExam ? td.noTasks : td.addExam}
+          </p>
         </div>
       </div>
 
       {/* Next Exam */}
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-50 mb-4">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Next Exam</p>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{td.nextExam}</p>
         {nextExam ? (
           <div className="flex items-center justify-between">
             <div>
@@ -170,18 +188,18 @@ export default function Dashboard({ onNavigate }) {
               <p className="text-xs text-gray-400 mt-0.5">{nextExam.date}</p>
             </div>
             <span className="text-xs font-semibold text-violet-600 bg-violet-50 px-3 py-1.5 rounded-full">
-              {daysUntilExam === 0 ? 'Today!' : `${daysUntilExam} day${daysUntilExam !== 1 ? 's' : ''} left`}
+              {daysUntilExam === 0 ? td.today : `${daysUntilExam} ${daysUntilExam !== 1 ? td.daysLeft : td.dayLeft}`}
             </span>
           </div>
         ) : (
-          <p className="text-sm text-gray-400">No upcoming exams. Add one in the calendar.</p>
+          <p className="text-sm text-gray-400">{td.noExam}</p>
         )}
       </div>
 
       {/* Weekly Overview */}
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-50 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Weekly Overview</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{td.weekly}</p>
           <p className="text-xs text-gray-400">
             {weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} –{' '}
             {weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -224,7 +242,7 @@ export default function Dashboard({ onNavigate }) {
       <div className="flex items-center gap-2 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-50 w-fit">
         <Flame size={18} className="text-orange-500" />
         <span className="text-sm font-bold text-gray-800">{streak}</span>
-        <span className="text-sm text-gray-400">Day Streak</span>
+        <span className="text-sm text-gray-400">{td.streakLabel}</span>
       </div>
     </div>
   );

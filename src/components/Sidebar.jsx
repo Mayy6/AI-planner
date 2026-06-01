@@ -1,18 +1,19 @@
-import { BookOpen, LayoutDashboard, Calendar, FileText, BarChart2, MessageSquare, Settings, LogOut } from 'lucide-react';
+import { BookOpen, LayoutDashboard, Calendar, FileText, MessageSquare, Settings, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../context/SettingsContext';
 import { isConfigured } from '../lib/supabase';
 
-const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', id: 'dashboard' },
-  { icon: Calendar,        label: 'Calendar',  id: 'calendar'  },
-  { icon: FileText,        label: 'Plans',     id: 'plans'     },
-  { icon: BarChart2,       label: 'Progress',  id: 'progress'  },
-  { icon: MessageSquare,   label: 'Chats',     id: 'chats'     },
-  { icon: Settings,        label: 'Settings',  id: 'settings'  },
+const NAV_IDS = [
+  { icon: LayoutDashboard, id: 'dashboard' },
+  { icon: Calendar,        id: 'calendar'  },
+  { icon: FileText,        id: 'plans'     },
+  { icon: MessageSquare,   id: 'chats'     },
+  { icon: Settings,        id: 'settings'  },
 ];
 
 export default function Sidebar({ active, onNavigate }) {
   const { user, signOut } = useAuth();
+  const { t } = useSettings();
 
   const displayName =
     user?.user_metadata?.name ||
@@ -39,7 +40,7 @@ export default function Sidebar({ active, onNavigate }) {
 
       {/* Nav */}
       <nav className="flex flex-col gap-1 flex-1">
-        {navItems.map(({ icon: Icon, label, id }) => {
+        {NAV_IDS.map(({ icon: Icon, id }) => {
           const isActive = active === id;
           return (
             <button
@@ -52,7 +53,7 @@ export default function Sidebar({ active, onNavigate }) {
               }`}
             >
               <Icon size={18} />
-              {label}
+              {t.nav[id]}
             </button>
           );
         })}
@@ -80,7 +81,7 @@ export default function Sidebar({ active, onNavigate }) {
             className="flex items-center gap-2 w-full px-3 py-2 text-xs text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
           >
             <LogOut size={14} />
-            Sign out
+            {t.settings.signOut}
           </button>
         )}
       </div>

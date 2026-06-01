@@ -1,4 +1,5 @@
-import { BookOpen } from 'lucide-react';
+import { useState } from 'react';
+import { BookOpen, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { isConfigured } from '../lib/supabase';
 
@@ -22,13 +23,54 @@ function GitHubIcon() {
 }
 
 export default function Login({ onDemo }) {
-  const { signInWithGoogle, signInWithGitHub } = useAuth();
+  const { signInWithGoogle, signInWithGitHub, signInWithEmail, signUpWithEmail } = useAuth();
+  const [tab, setTab] = useState('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const switchTab = (t) => { setTab(t); setError(''); setSuccess(''); };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+    setBusy(true);
+    try {
+      if (tab === 'signin') {
+        const { error: err } = await signInWithEmail(email, password);
+        if (err) throw err;
+      } else {
+        const { data, error: err } = await signUpWithEmail(email, password);
+        if (err) throw err;
+        if (!data.session) {
+          setSuccess('Account created! Check your email to confirm before signing in.');
+          return;
+        }
+      }
+    } catch (err) {
+      const msg = err?.message || '';
+      if (msg.includes('Invalid login credentials')) setError('Invalid email or password.');
+      else if (msg.includes('Email not confirmed')) setError('Please confirm your email address first.');
+      else if (msg.includes('User already registered')) setError('An account with this email already exists. Try signing in.');
+      else setError(msg || 'Something went wrong. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const inputCls = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 disabled:opacity-40';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-indigo-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 w-full max-w-sm">
+
         {/* Logo */}
-        <div className="flex items-center justify-center gap-2.5 mb-8">
+        <div className="flex items-center justify-center gap-2.5 mb-6">
           <div className="w-10 h-10 bg-violet-600 rounded-xl flex items-center justify-center">
             <BookOpen size={20} className="text-white" />
           </div>
@@ -38,15 +80,77 @@ export default function Login({ onDemo }) {
           </div>
         </div>
 
-        <h1 className="text-xl font-bold text-gray-800 text-center mb-1">Welcome back</h1>
-        <p className="text-sm text-gray-400 text-center mb-7">Sign in to continue your study journey</p>
-
         {!isConfigured && (
           <div className="mb-5 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 leading-relaxed">
-            <strong>Setup required:</strong> Add your Supabase credentials to <code className="bg-amber-100 px-1 rounded">.env</code> to enable login. See <code className="bg-amber-100 px-1 rounded">.env.example</code> for instructions.
+            <strong>Setup required:</strong> Add Supabase credentials to <code className="bg-amber-100 px-1 rounded">.env</code>.
           </div>
         )}
 
+        {/* Tab toggle */}
+        <div className="flex bg-gray-100 rounded-xl p-1 mb-5">
+          {[['signin', 'Sign in'], ['signup', 'Create account']].map(([t, label]) => (
+            <button
+              key={t}
+              onClick={() => switchTab(t)}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                tab === t ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Email/password form */}
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="Email"
+            className={inputCls}
+            required
+            disabled={!isConfigured || busy}
+          />
+          <div className="relative">
+            <input
+              type={showPw ? 'text' : 'password'}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Password"
+              className={`${inputCls} pr-10`}
+              required
+              disabled={!isConfigured || busy}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPw(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+
+          {error && <p className="text-xs text-red-500 pl-1">{error}</p>}
+          {success && <p className="text-xs text-green-600 pl-1">{success}</p>}
+
+          <button
+            type="submit"
+            disabled={!isConfigured || busy}
+            className="w-full py-2.5 bg-violet-600 rounded-xl text-sm font-semibold text-white hover:bg-violet-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {busy ? 'Please wait…' : tab === 'signin' ? 'Sign in' : 'Create account'}
+          </button>
+        </form>
+
+        {/* Divider */}
+        <div className="flex items-center gap-3 my-5">
+          <div className="flex-1 h-px bg-gray-200" />
+          <span className="text-xs text-gray-400">or continue with</span>
+          <div className="flex-1 h-px bg-gray-200" />
+        </div>
+
+        {/* OAuth buttons */}
         <button
           onClick={signInWithGoogle}
           disabled={!isConfigured}
@@ -65,16 +169,14 @@ export default function Login({ onDemo }) {
           Continue with GitHub
         </button>
 
-        {!isConfigured && (
-          <button
-            onClick={onDemo}
-            className="w-full mt-3 text-xs text-gray-400 hover:text-violet-600 transition-colors py-1"
-          >
-            Continue in demo mode →
-          </button>
-        )}
+        <button
+          onClick={onDemo}
+          className="w-full mt-4 text-xs text-gray-400 hover:text-violet-600 transition-colors py-1"
+        >
+          Continue in demo mode →
+        </button>
 
-        <p className="text-xs text-gray-400 text-center mt-4">
+        <p className="text-xs text-gray-400 text-center mt-3">
           By signing in, you agree to our Terms of Service.
         </p>
       </div>

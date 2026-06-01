@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, CheckCircle2, Circle, X } from 'lucide-react';
 import { useEvents } from '../hooks/useEvents';
 import AddEventModal from './AddEventModal';
 
@@ -80,7 +80,7 @@ function fmt12(time) {
 
 // ── sub-components ──────────────────────────────────────────────────────────
 
-function MonthView({ currentDate, events, today, onDayClick, onDeleteEvent }) {
+function MonthView({ currentDate, events, today, onDayClick, onDeleteEvent, onToggleComplete }) {
   const grid = getMonthGrid(currentDate.getFullYear(), currentDate.getMonth());
 
   return (
@@ -122,11 +122,24 @@ function MonthView({ currentDate, events, today, onDayClick, onDeleteEvent }) {
                   return (
                     <div
                       key={ev.id}
-                      onClick={e => { e.stopPropagation(); onDeleteEvent(ev.id); }}
-                      className={`text-xs px-1.5 py-0.5 rounded ${s.bg} ${s.text} truncate cursor-pointer hover:opacity-70 transition-opacity`}
-                      title={`${ev.title} — click to delete`}
+                      onClick={e => { e.stopPropagation(); onToggleComplete(ev.id); }}
+                      className={`text-xs px-1.5 py-0.5 rounded ${s.bg} ${s.text} cursor-pointer hover:opacity-80 transition-opacity group/pill flex items-center gap-1 ${
+                        ev.completed ? 'opacity-60' : ''
+                      }`}
+                      title={ev.completed ? `${ev.title} — click to mark incomplete` : `${ev.title} — click to mark complete`}
                     >
-                      {ev.title}
+                      {ev.completed
+                        ? <CheckCircle2 size={9} className="flex-shrink-0" />
+                        : <Circle size={9} className="flex-shrink-0 opacity-40" />
+                      }
+                      <span className={`truncate flex-1 ${ev.completed ? 'line-through' : ''}`}>{ev.title}</span>
+                      <button
+                        onClick={e => { e.stopPropagation(); onDeleteEvent(ev.id); }}
+                        className="flex-shrink-0 opacity-0 group-hover/pill:opacity-60 hover:!opacity-100 transition-opacity ml-auto"
+                        title="Delete event"
+                      >
+                        <X size={9} />
+                      </button>
                     </div>
                   );
                 })}
@@ -142,7 +155,7 @@ function MonthView({ currentDate, events, today, onDayClick, onDeleteEvent }) {
   );
 }
 
-function WeekView({ currentDate, events, today, onSlotClick, onDeleteEvent }) {
+function WeekView({ currentDate, events, today, onSlotClick, onDeleteEvent, onToggleComplete }) {
   const weekDates = getWeekDates(currentDate);
 
   return (
@@ -184,9 +197,18 @@ function WeekView({ currentDate, events, today, onSlotClick, onDeleteEvent }) {
           return (
             <div
               key={di}
-              className="flex-1 border-l border-gray-100 relative"
+              className="flex-1 border-l border-gray-100 relative cursor-pointer"
               style={{ height: HOURS.length * HOUR_HEIGHT }}
-              onClick={() => onSlotClick(toDateStr(d))}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const relY = e.clientY - rect.top;
+                const rawHour = relY / HOUR_HEIGHT + START_HOUR;
+                const hour = Math.min(Math.floor(rawHour), END_HOUR - 1);
+                const mins = Math.floor((rawHour % 1) * 2) * 30; // snap to :00 or :30
+                const endHour = Math.min(hour + 1, 23);
+                const pad = (n) => String(n).padStart(2, '0');
+                onSlotClick(toDateStr(d), `${pad(hour)}:${pad(mins)}`, `${pad(endHour)}:${pad(mins)}`);
+              }}
             >
               {/* Hour lines */}
               {HOURS.map(h => (
@@ -205,19 +227,37 @@ function WeekView({ currentDate, events, today, onSlotClick, onDeleteEvent }) {
                   <div
                     key={ev.id}
                     style={{ top, height, left: 2, right: 2 }}
-                    className={`absolute rounded-lg px-2 py-1 text-xs font-medium ${s.bg} ${s.text} overflow-hidden cursor-pointer group`}
+                    className={`absolute rounded-lg px-2 py-1 text-xs font-medium ${s.bg} ${s.text} overflow-hidden cursor-default group transition-opacity ${
+                      ev.completed ? 'opacity-60' : ''
+                    }`}
                     onClick={e => e.stopPropagation()}
                   >
-                    <div className="flex items-start justify-between gap-1">
-                      <div className="truncate">
+                    <div className="flex items-start gap-1 h-full">
+                      {/* Complete toggle */}
+                      <button
+                        onClick={() => onToggleComplete(ev.id)}
+                        className="flex-shrink-0 mt-0.5 transition-opacity hover:opacity-100"
+                        title={ev.completed ? 'Mark incomplete' : 'Mark complete'}
+                      >
+                        {ev.completed
+                          ? <CheckCircle2 size={11} />
+                          : <Circle size={11} className="opacity-50" />
+                        }
+                      </button>
+
+                      {/* Title + time */}
+                      <div className={`flex-1 min-w-0 ${ev.completed ? 'line-through' : ''}`}>
                         <div className="font-semibold truncate">{ev.title}</div>
                         {height > 30 && (
                           <div className="opacity-70">{fmt12(ev.startTime)} – {fmt12(ev.endTime)}</div>
                         )}
                       </div>
+
+                      {/* Delete (hover only) */}
                       <button
                         onClick={() => onDeleteEvent(ev.id)}
                         className="opacity-0 group-hover:opacity-100 flex-shrink-0 transition-opacity"
+                        title="Delete event"
                       >
                         <Trash2 size={11} />
                       </button>
@@ -240,7 +280,9 @@ export default function Calendar() {
   const [view, setView] = useState('week');
   const [showModal, setShowModal] = useState(false);
   const [modalDate, setModalDate] = useState(null);
-  const { events, addEvent, removeEvent } = useEvents();
+  const [modalStartTime, setModalStartTime] = useState('09:00');
+  const [modalEndTime, setModalEndTime] = useState('10:00');
+  const { events, addEvent, removeEvent, toggleComplete } = useEvents();
 
   // Navigation
   const prev = () => {
@@ -263,8 +305,10 @@ export default function Calendar() {
     ? `${MONTHS[currentDate.getMonth()]} ${currentDate.getFullYear()}`
     : `${MONTHS[weekDates[0].getMonth()]} ${weekDates[0].getFullYear()}`;
 
-  const openModal = (date) => {
+  const openModal = (date, startTime, endTime) => {
     setModalDate(date);
+    setModalStartTime(startTime || '09:00');
+    setModalEndTime(endTime || '10:00');
     setShowModal(true);
   };
 
@@ -322,6 +366,7 @@ export default function Calendar() {
             today={today}
             onDayClick={openModal}
             onDeleteEvent={removeEvent}
+            onToggleComplete={toggleComplete}
           />
         ) : (
           <WeekView
@@ -330,6 +375,7 @@ export default function Calendar() {
             today={today}
             onSlotClick={openModal}
             onDeleteEvent={removeEvent}
+            onToggleComplete={toggleComplete}
           />
         )}
 
@@ -347,6 +393,9 @@ export default function Calendar() {
       {showModal && (
         <AddEventModal
           defaultDate={modalDate}
+          defaultStartTime={modalStartTime}
+          defaultEndTime={modalEndTime}
+          existingEvents={events}
           onSave={addEvent}
           onClose={() => setShowModal(false)}
         />

@@ -37,10 +37,16 @@ export function AuthProvider({ children }) {
       options: { redirectTo: window.location.origin },
     });
 
+  const signInWithEmail = (email, password) =>
+    supabase.auth.signInWithPassword({ email, password });
+
+  const signUpWithEmail = (email, password) =>
+    supabase.auth.signUp({ email, password });
+
   const signOut = () => supabase.auth.signOut();
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signInWithGitHub, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signInWithGitHub, signInWithEmail, signUpWithEmail, signOut }}>
       {children}
     </AuthContext.Provider>
   );
